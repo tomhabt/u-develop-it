@@ -3,102 +3,130 @@ const router = express.Router();
 const db = require('../../db/connection');
 const inputCheck = require('../../utils/inputCheck');
 
-// 1. get all candidates from the database
-router.get('/api/candidates', (req,res) => {
-    db.query(`SELECT candidates.*, parties.name AS party_name FROM candidates LEFT JOIN parties ON candidates.party_id = parties.id`, (err,rows) => {
-        if(err) {
-            res.status(500).json({error:err.message});
-        }
-        res.json({
-            message:'success',
-            data:rows
-        });
-    });
-});
+// Get all candidates and their party affiliation
+router.get('/candidates', (req, res) => {
+  const sql = `SELECT candidates.*, parties.name 
+                AS party_name 
+                FROM candidates 
+                LEFT JOIN parties 
+                ON candidates.party_id = parties.id`;
 
-
-// 2. get selected candidate from the database
-router.get ('/api/candidate/:id', (req,res) => {
-    db.query(`SELECT candidates.*, parties.name AS party_name FROM candidates LEFT JOIN parties ON candidates.party_id = parties.id WHERE id = ?`, req.params.id, (err,row) => {
-        if(err) {
-            res.status(400).json({error:err.message}); 
-        }
-        res.json({
-            message:'success',
-            data:row
-        });
-    });
-});
-
-
-// 3. Post a selected candidate from the database
-router.post ('/api/candidate/:id', ({body},res) => {
-    if (inputCheck(body,'first_name', 'last_name', 'industry_connected')) {
-        res.status(400).json({error:inputCheck(body,'first_name', 'last_name', 'industry_connected')})
+  db.query(sql, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
     }
-    const sql = `INSERT INTO candidates (id,first_name, last_name, industry_connected)
-               VALUES (?,?,?,?)`;
-    const params = [1,'Ronald', 'Firbank', 1];
-
-            db.query(sql,params, (err,result) => {
-                if(err) {
-                    res.status(400).json({
-                        error:err.message
-                    })
-                }
-                res.json({
-                    message: 'candidate sucessfully added',
-                    data:body
-                });
-            });
-    
-});
-
-
-// 4. Update a candidate's party
-router.put('/api/candidate/:id', (req, res) => {
-    if (inputCheck(req.body, 'party_id')) {
-        res.status(400).json({error:errors})
-    }
-    const sql = `UPDATE candidates SET party_id = ? 
-                 WHERE id = ?`;
-    const params = [req.body.party_id, req.params.id];
-    db.query(sql, params, (err, result) => {
-      if (err) {
-        res.status(400).json({ error: err.message });
-        // check if a record was found
-      } else if (!result.affectedRows) {
-        res.json({
-          message: 'Candidate not found'
-        });
-      } else {
-        res.json({
-          message: 'success',
-          data: req.body,
-          changes: result.affectedRows
-        });
-      }
+    res.json({
+      message: 'success',
+      data: rows
     });
   });
-
-
-// 5. delete a selected candidate from the database
-router.delete ('/api/candidate/:id', (req,res) => {
-    db.query(`DELETE FROM candidates WHERE id = ?`, req.params.id, (err,result) => {
-        if(err) {
-            res.status(400).json({error:err.message}); 
-        } else if (!result.affectedRows) {
-            res.json({
-                message: 'Candidate not found'
-            });
-        }
-        res.json({
-            message:'candidate successfully deleted',
-            changes:result.affectedRows,
-            id:req.params.id
-        });
-    });
 });
 
+// Get single candidate with party affiliation
+router.get('/candidate/:id', (req, res) => {
+  const sql = `SELECT candidates.*, parties.name 
+               AS party_name 
+               FROM candidates 
+               LEFT JOIN parties 
+               ON candidates.party_id = parties.id 
+               WHERE candidates.id = ?`;
+  const params = [req.params.id];
 
-  module.exports = router;
+  db.query(sql, params, (err, row) => {
+    if (err) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.json({
+      message: 'success',
+      data: row
+    });
+  });
+});
+
+// Create a candidate
+router.post('/candidate', ({ body }, res) => {
+  const errors = inputCheck(
+    body,
+    'first_name',
+    'last_name',
+    'industry_connected'
+  );
+  if (errors) {
+    res.status(400).json({ error: errors });
+    return;
+  }
+
+  const sql = `INSERT INTO candidates (first_name, last_name, industry_connected, party_id) VALUES (?,?,?,?)`;
+  const params = [
+    body.first_name,
+    body.last_name,
+    body.industry_connected,
+    body.party_id
+  ];
+
+  db.query(sql, params, (err, result) => {
+    if (err) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.json({
+      message: 'success',
+      data: body
+    });
+  });
+});
+
+// Update a candidate's party
+router.put('/candidate/:id', (req, res) => {
+  const errors = inputCheck(req.body, 'party_id');
+  if (errors) {
+    res.status(400).json({ error: errors });
+    return;
+  }
+
+  const sql = `UPDATE candidates SET party_id = ? 
+               WHERE id = ?`;
+  const params = [req.body.party_id, req.params.id];
+
+  db.query(sql, params, (err, result) => {
+    if (err) {
+      res.status(400).json({ error: err.message });
+    } else if (!result.affectedRows) {
+      res.json({
+        message: 'Candidate not found'
+      });
+    } else {
+      res.json({
+        message: 'success',
+        data: req.body,
+        changes: result.affectedRows
+      });
+    }
+  });
+});
+
+// Delete a candidate
+router.delete('/candidate/:id', (req, res) => {
+  const sql = `DELETE FROM candidates WHERE id = ?`;
+  const params = [req.params.id];
+
+  db.query(sql, params, (err, result) => {
+    if (err) {
+      res.status(400).json({ error: res.message });
+    } else if (!result.affectedRows) {
+      res.json({
+        message: 'Candidate not found'
+      });
+    } else {
+      res.json({
+        message: 'deleted',
+        changes: result.affectedRows,
+        id: req.params.id
+      });
+    }
+  });
+});
+
+module.exports = router;
